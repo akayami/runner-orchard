@@ -18,20 +18,38 @@ This project is not affiliated with Apple or GitHub.
 ## Quick start
 
 Install Xcode, accept its license and complete first launch. Use a dedicated
-standard macOS account and log into its graphical session. Install Homebrew,
-then from this checkout:
+standard macOS account and log into its graphical session. From this checkout:
 
 ```bash
-cd macos
-brew bundle --file Brewfile
-cp configs/example.json configs/local.json
-# Edit local.json with your organization, unique runner name, group and Xcode.
-gh auth login
-python3 runner.py provision-group --config configs/local.json --repositories your-private-app
-bash install.sh configs/local.json
+bash install.sh --tools
 ```
 
-The GitHub identity needs permission to manage organization runners and groups.
+The wizard asks **standalone or Orchard first**. Standalone asks for organization,
+name, group, labels and Xcode locally. Orchard asks for the controller/console URL,
+suggested name and Xcode; approve the matching request code and choose its profile
+and final name in the console. No personal GitHub token is sent to an Orchard Mac.
+
+```bash
+bash install.sh http://orchard.example.test --tools
+# JSON skips local configuration prompts:
+bash install.sh --config config/local.setup.json --tools
+```
+
+Copy either config/setup.standalone.example.json or setup.orchard.example.json
+to your private local setup file. The old flat runner JSON also works and selects
+standalone mode. `--configure-only` saves private configuration without enrolling
+or installing. `--tools` installs only missing tools and bootstraps Homebrew/Python
+when needed. Xcode installation/license and macOS privacy consent remain OS steps.
+Power management is optional and off unless selected. JSON mode fails rather than
+asking for missing values/authentication; pre-authenticate gh in standalone mode
+and arrange sudo authorization if enabling power management unattended.
+
+Orchard provisioning is opt-in on the server; see [setup modes](docs/setup.md).
+GitHub still dispatches jobs directly. After registration, console outages do not
+stop builds. The existing runner and collector commands remain available under
+macos/; macos/install.sh forwards to the root installer for compatibility.
+
+In standalone mode the GitHub identity needs permission to manage organization runners and groups.
 For a classic CLI token this may require `gh auth refresh -h github.com -s admin:org`.
 Use the narrowest permissions supported by your authentication method. The
 installer checks GitHub's published runner checksum before extracting it.

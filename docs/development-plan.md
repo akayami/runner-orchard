@@ -1,7 +1,7 @@
 # Runner Orchard development plan
 
 Status: runner tooling, initial web console, collector, MCP and container/Helm
-packaging implemented. Kubernetes discovery, Prometheus history queries,
+packaging and optional console-approved installation implemented. Kubernetes discovery, Prometheus history queries,
 automatic GitHub App token renewal and further fleet qualification remain planned.
 
 ## Purpose
@@ -111,7 +111,10 @@ structured calls, errors and compatibility with a real client. History requests
 accept named metrics and bounded time windows, not arbitrary PromQL passthrough.
 
 No shell execution, cancellation, drain, power changes, arbitrary file access or
-runner controls are exposed in v1. Apply request limits and Origin/Host validation
+existing-runner controls are exposed in v1. Opt-in provisioning profiles allow
+initial registration with an organization, group, labels and approved name.
+Only a requesting machine can claim its one-time bootstrap handoff; it never
+receives the console's long-lived GitHub credential. Apply request limits and Origin/Host validation
 where appropriate. Ingestion is private and validates schema/host IDs. With no
 ingestion authentication, other allowed network clients could spoof reports; such
 reports must never authorize execution or control operations.

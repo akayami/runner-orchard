@@ -74,6 +74,9 @@ func run() error {
 		token = strings.TrimSpace(string(data))
 	}
 	state := fleet.New()
+	if c.Provisioning.Enabled && token == "" {
+		return fmt.Errorf("provisioning requires a server-side GitHub credential")
+	}
 	github := fleet.NewGitHub(func() string { return token })
 	go func() {
 		for {
@@ -85,7 +88,7 @@ func run() error {
 			}
 		}
 	}()
-	server := &http.Server{Addr: c.Listen, Handler: console.Handler(state, c), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384}
+	server := &http.Server{Addr: c.Listen, Handler: console.Handler(state, c, github), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384}
 	go func() {
 		<-ctx.Done()
 		shutdown, done := context.WithTimeout(context.Background(), 10*time.Second)

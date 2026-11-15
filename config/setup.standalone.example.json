@@ -1,0 +1,13 @@
+{
+  "mode": "standalone",
+  "runner": {
+    "organization": "your-organization",
+    "name": "mac-worker-01",
+    "runner_group": "apple-builds",
+    "labels": ["apple-build"],
+    "developer_dir": "/Applications/Xcode.app/Contents/Developer"
+  },
+  "private_repositories": [],
+  "power_management": false,
+  "install_tools": true
+}

@@ -22,12 +22,13 @@ import (
 var assets embed.FS
 
 type Config struct {
-	Listen       string   `json:"listen"`
-	AllowedHosts []string `json:"allowed_hosts"`
-	Scopes       []string `json:"scopes"`
-	Repositories []string `json:"repositories"`
-	TokenFile    string   `json:"token_file"`
-	PollSeconds  int      `json:"poll_seconds"`
+	Listen       string       `json:"listen"`
+	AllowedHosts []string     `json:"allowed_hosts"`
+	Scopes       []string     `json:"scopes"`
+	Repositories []string     `json:"repositories"`
+	TokenFile    string       `json:"token_file"`
+	PollSeconds  int          `json:"poll_seconds"`
+	Provisioning Provisioning `json:"provisioning"`
 }
 
 func (c Config) Validate() error {
@@ -53,7 +54,7 @@ func (c Config) Validate() error {
 			return fmt.Errorf("invalid repository")
 		}
 	}
-	return nil
+	return c.Provisioning.validate()
 }
 func jsonResponse(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -111,8 +112,13 @@ func NewMCP(state *fleet.State) *mcp.Server {
 	})
 	return server
 }
-func Handler(state *fleet.State, config Config) http.Handler {
+func Handler(state *fleet.State, config Config, github ...*fleet.GitHub) http.Handler {
 	mux := http.NewServeMux()
+	var provisioner *fleet.GitHub
+	if len(github) > 0 {
+		provisioner = github[0]
+	}
+	registerEnrollment(mux, config, provisioner)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { jsonResponse(w, map[string]string{"status": "ok"}) })
 	mux.HandleFunc("GET /api/state", func(w http.ResponseWriter, r *http.Request) { jsonResponse(w, state.Snapshot()) })
 	mux.HandleFunc("GET /api/history/{id}", func(w http.ResponseWriter, r *http.Request) {

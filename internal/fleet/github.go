@@ -9,10 +9,12 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 type GitHub struct {
+	mu         sync.Mutex
 	Base       string
 	Token      func() string
 	Client     *http.Client
@@ -26,6 +28,8 @@ func NewGitHub(token func() string) *GitHub {
 	return &GitHub{Base: "https://api.github.com", Token: token, Client: &http.Client{Timeout: 12 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}, etags: map[string]string{}, cache: map[string][]byte{}}
 }
 func (g *GitHub) get(ctx context.Context, path string, out any) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	if time.Now().Before(g.RetryAfter) {
 		return fmt.Errorf("GitHub rate limit backoff until %s", g.RetryAfter.UTC().Format(time.RFC3339))
 	}

@@ -1,0 +1,8 @@
+{
+  "mode": "orchard",
+  "console_url": "http://orchard.example.test",
+  "name": "mac-worker-01",
+  "developer_dir": "/Applications/Xcode.app/Contents/Developer",
+  "power_management": false,
+  "install_tools": true
+}

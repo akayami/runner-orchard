@@ -32,21 +32,25 @@ def snapshot():
         registration, drained = {}, False
         problems.append("Runner registration/service unavailable")
     power = {}
+    options = BASE / ".health-options.json"
+    require_power = json.loads(options.read_text()).get("require_power", True) if options.exists() else True
     try:
         power = json.loads(Path("/Library/Application Support/RunnerOrchard/status.json").read_text())
-        if time.time() - power["updated"] > 15 or not power["healthy"]:
+        if require_power and (time.time() - power["updated"] > 15 or not power["healthy"]):
             problems.append("Power supervisor is stale or unhealthy")
     except (OSError, ValueError, KeyError):
-        problems.append("Power supervisor is not reporting")
+        if require_power:
+            problems.append("Power supervisor is not reporting")
     return {"updated": time.time(), "healthy": not problems, "problems": problems,
             "runner": registration.get("agentName"), "drained": drained,
             "free_gib": free, "power": power}
 
 
-def install():
+def install(require_power=True):
     if os.getuid() == 0:
         raise RuntimeError("Install health checks as the CI account")
     BASE.mkdir(parents=True, exist_ok=True)
+    (BASE / ".health-options.json").write_text(json.dumps({"require_power": require_power}))
     target = BASE / "health.py"
     if Path(__file__).resolve() != target.resolve():
         shutil.copyfile(__file__, target)
@@ -66,7 +70,7 @@ def uninstall():
     subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{LABEL}"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     (Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist").unlink(missing_ok=True)
-    for name in ("health.py", "health.json"):
+    for name in ("health.py", "health.json", ".health-options.json"):
         (BASE / name).unlink(missing_ok=True)
 
 

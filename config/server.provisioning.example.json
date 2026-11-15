@@ -1,0 +1,17 @@
+{
+  "listen": "127.0.0.1:8787",
+  "allowed_hosts": ["localhost", "127.0.0.1"],
+  "scopes": ["orgs/your-organization"],
+  "repositories": [],
+  "token_file": "",
+  "poll_seconds": 30,
+  "provisioning": {
+    "enabled": true,
+    "profiles": [{
+      "id": "apple",
+      "organization": "your-organization",
+      "runner_group": "apple-builds",
+      "labels": ["apple-build"]
+    }]
+  }
+}

@@ -1,0 +1,99 @@
+# Setup modes and console provisioning
+
+Run `bash install.sh --tools` from a Runner Orchard checkout. The first question
+selects standalone or Orchard. Supplying a console URL preselects Orchard; a JSON
+file skips local configuration questions entirely. Neither path installs a web
+server on the Mac. Both produce an ordinary organization-scoped GitHub runner.
+
+## Standalone
+
+The wizard asks for GitHub organization, unique name, restricted group, additional
+capability labels and Xcode path. It can create a new selected-private-repository
+group when explicit repository names are provided. Existing group access is never
+silently widened. Registration uses the local gh identity; interactive setup can
+launch GitHub authentication. JSON mode requires authentication already present.
+No console is contacted and no collector is required.
+
+## Orchard
+
+```bash
+bash install.sh http://orchard.example.test --tools
+```
+
+Choose Orchard, confirm the URL, suggested name and local Xcode path, then compare
+the displayed request code with the console's New machines panel. Select an
+administrator-configured profile and final runner name there and approve setup.
+The installer polls for up to ten minutes. Only that requesting machine can claim
+the response, using a one-time random credential that never appears in the console.
+
+The console validates that the target group allows selected private repositories
+and excludes public ones, refuses duplicate runner names, obtains a short-lived
+registration token and checksum-bearing official runner package metadata, and
+returns them once to the approved installer. The long-lived GitHub credential
+stays on the console. This handoff is delivered once; GitHub's registration token
+is organization-scoped and expires after one hour, rather than being a credential
+restricted to one particular runner name. Approve only trusted machines.
+See [GitHub's registration API](https://docs.github.com/en/rest/actions/self-hosted-runners#create-a-registration-token-for-an-organization).
+The Mac verifies the archive checksum before extraction.
+It then registers directly with GitHub and installs the outbound metrics collector.
+
+The organization/group/labels come from a central provisioning profile, not the
+telemetry URL or a repository name guessed from the machine. Profiles are configured
+in the server JSON or Helm config.provisioning values:
+
+```json
+{
+  "provisioning": {
+    "enabled": true,
+    "profiles": [{
+      "id": "apple",
+      "organization": "your-organization",
+      "runner_group": "apple-builds",
+      "labels": ["apple-build"]
+    }]
+  }
+}
+```
+
+The server's GitHub credential must now permit organization runner registration
+and group reads. Provisioning is disabled by default; monitoring credentials need
+not be upgraded unless an operator enables it. Host architecture labels are
+assigned by GitHub and cannot be supplied as capability labels in a profile.
+
+New-machine requests are bounded, expire after ten minutes, and are held in RAM.
+A console restart invalidates pending requests; rerun setup. Installed runner
+identity persists locally and in GitHub, so existing builds do not depend on this
+queue or the console. No database is added. Profiles remain operator-controlled
+configuration; the UI approves initial name/profile selection, not arbitrary
+commands or lifecycle edits to existing machines. MCP tools remain read-only.
+
+This unauthenticated UI assumes a trusted private operator network. Approving
+setup is a privileged operation. Do not expose the provisioning routes publicly.
+Use HTTPS on networks where bootstrap credentials could be intercepted. The
+installer never follows enrollment redirects to another origin. No incoming
+listener is installed on the Mac; macOS may ask for outbound local-network access.
+
+## JSON and saved files
+
+Use `--config FILE` or pass a JSON file as the positional argument. Examples are
+config/setup.standalone.example.json and config/setup.orchard.example.json.
+Standalone JSON contains runner configuration; Orchard JSON contains the URL and
+local machine hints. Orchard still requires console approval; "no prompts" means
+no local configuration dialogue, not bypassing the operator's approval policy.
+
+Files saved under macos/configs/local*.json are ignored by git and mode 0600.
+Registration/enrollment credentials are not saved. The optional collector's
+endpoint is derived from console_url plus /api/telemetry. Do not edit the runner's
+GitHub registration URL to point at Orchard.
+
+`--tools` installs missing command-line dependencies only. Orchard builds its
+collector with limited Go parallelism unless collector_binary supplies a prebuilt
+native executable. JSON may set install_tools=true. Full Xcode and its license
+cannot be provisioned unattended by this script; Homebrew/sudo and OS privacy
+prompts may require prior host preparation. Enabling power_management in JSON uses
+noninteractive sudo and fails if authorization is unavailable.
+
+Legacy registrations must be drained and migrated explicitly. Setup never replaces
+an existing Orchard worker or silently starts a second worker next to a detected
+legacy installation. This command is for provisioning a new worker; collector-only
+attachment to an existing worker continues to use macos/collector_service.py.

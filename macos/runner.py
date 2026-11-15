@@ -42,15 +42,23 @@ def pages(endpoint, key):
 
 def read_config(path):
     config = json.loads(path.read_text())
+    return validate_config(config)
+
+
+def validate_config(config):
+    if not isinstance(config, dict):
+        raise ValueError("runner configuration must be an object")
     for key in ("organization", "name"):
-        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", config[key]):
+        if not isinstance(config.get(key), str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", config[key]):
             raise ValueError(f"Invalid {key}")
-    if not config.get("runner_group"):
+    if not isinstance(config.get("runner_group"), str) or not config["runner_group"].strip() or any(c in config["runner_group"] for c in "\r\n"):
         raise ValueError("Specify an access-restricted runner_group")
     labels = config.get("labels", [])
-    if not labels or any(not isinstance(label, str) or not re.fullmatch(
+    if not isinstance(labels, list) or not labels or any(not isinstance(label, str) or not re.fullmatch(
             r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", label) for label in labels):
         raise ValueError("Specify valid capability labels")
+    if not isinstance(config.get("developer_dir"), str):
+        raise ValueError("developer_dir must be an absolute Xcode path")
     developer = Path(config["developer_dir"])
     if not developer.is_absolute() or any(c in str(developer) for c in "\r\n"):
         raise ValueError("developer_dir must be an absolute path without newlines")
@@ -93,12 +101,12 @@ def service(config, action):
             subprocess.run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(path)], check=True)
 
 
-def preflight(config):
+def preflight(config, need_gh=True):
     if platform.system() != "Darwin" or platform.machine() not in ("arm64", "x86_64"):
         raise RuntimeError("Requires an Intel or Apple silicon Mac")
     if os.getuid() == 0:
         raise RuntimeError("Run as the CI login account, never root")
-    for tool in ("gh", "xcodebuild"):
+    for tool in (("gh", "xcodebuild") if need_gh else ("xcodebuild",)):
         if not shutil.which(tool):
             raise RuntimeError(f"Missing {tool}")
     if not Path(config["developer_dir"]).is_dir():
@@ -111,16 +119,20 @@ def preflight(config):
                    check=True, stdout=subprocess.DEVNULL)
 
 
-def install(config):
-    preflight(config)
+def install(config, enrollment=None):
+    preflight(config, need_gh=enrollment is None)
     org = config["organization"]
-    groups = pages(f"orgs/{org}/actions/runner-groups", "runner_groups")
-    group = next((g for g in groups if g["name"] == config["runner_group"]), None)
-    if not group or group["visibility"] != "selected" or group["allows_public_repositories"]:
-        raise RuntimeError("Runner group must exist, allow selected repositories only, and exclude public repositories")
+    if enrollment is None:
+        groups = pages(f"orgs/{org}/actions/runner-groups", "runner_groups")
+        group = next((g for g in groups if g["name"] == config["runner_group"]), None)
+        if not group or group["visibility"] != "selected" or group["allows_public_repositories"]:
+            raise RuntimeError("Runner group must exist, allow selected repositories only, and exclude public repositories")
     BASE.mkdir(parents=True, exist_ok=True, mode=0o700)
     BASE.chmod(0o700)
     configured = BASE / ".runner"
+    newly_registered = not configured.exists()
+    if enrollment is not None and not newly_registered:
+        raise RuntimeError("Already registered; enrollment never replaces a running worker")
     if configured.exists():
         existing = json.loads(configured.read_text(encoding="utf-8-sig"))
         if (existing["gitHubUrl"].rstrip("/") != f"https://github.com/{org}"
@@ -131,8 +143,14 @@ def install(config):
             raise RuntimeError("Configuration changed; reconfigure explicitly rather than silently ignoring it")
     else:
         arch = "arm64" if platform.machine() == "arm64" else "x64"
-        package = next(p for p in github(f"orgs/{org}/actions/runners/downloads")
-                       if p["os"] == "osx" and p["architecture"] == arch)
+        package = enrollment["package"] if enrollment is not None else next(
+            p for p in github(f"orgs/{org}/actions/runners/downloads")
+            if p["os"] == "osx" and p["architecture"] == arch)
+        if (package.get("os") != "osx" or package.get("architecture") != arch
+                or not isinstance(package.get("download_url"), str)
+                or not package["download_url"].startswith("https://github.com/actions/runner/releases/download/")
+                or not re.fullmatch(r"[a-fA-F0-9]{64}", package.get("sha256_checksum", ""))):
+            raise RuntimeError("Untrusted runner package metadata")
         with tempfile.TemporaryDirectory(prefix="apple-runner-") as temp:
             archive = Path(temp) / "runner.tar.gz"
             urllib.request.urlretrieve(package["download_url"], archive)
@@ -140,7 +158,8 @@ def install(config):
                 raise RuntimeError("Runner checksum mismatch")
             subprocess.run(["tar", "xzf", str(archive), "-C", str(BASE)], check=True)
         # Capture tokens; never print config.sh's token-bearing command on failure.
-        token = github(f"orgs/{org}/actions/runners/registration-token", "POST")["token"]
+        token = enrollment["registration_token"] if enrollment is not None else github(
+            f"orgs/{org}/actions/runners/registration-token", "POST")["token"]
         result = subprocess.run([
             "./config.sh", "--unattended", "--url", f"https://github.com/{org}",
             "--token", token, "--name", config["name"], "--runnergroup", config["runner_group"],
@@ -160,7 +179,8 @@ def install(config):
     path = service_path()
     settings = plistlib.loads(path.read_bytes())
     if not settings.get("KeepAlive"):
-        require_idle(config)
+        if not newly_registered:
+            require_idle(config)
         service(config, "stop")
         settings.update(KeepAlive=True, ThrottleInterval=10, Nice=10)
         path.write_bytes(plistlib.dumps(settings))

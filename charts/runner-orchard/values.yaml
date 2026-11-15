@@ -9,6 +9,9 @@ config:
   repositories: []
   token_file: ""
   poll_seconds: 30
+  provisioning:
+    enabled: false
+    profiles: []
 githubSecret:
   name: ""
   key: token

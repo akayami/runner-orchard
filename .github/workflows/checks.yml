@@ -13,7 +13,7 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 -m unittest discover -s macos -p 'test_*.py' -v
-      - run: bash -n macos/install.sh macos/power-service.sh
+      - run: bash -n install.sh macos/install.sh macos/power-service.sh
   swift:
     if: github.event_name == 'workflow_dispatch'
     runs-on: macos-latest

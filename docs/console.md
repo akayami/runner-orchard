@@ -1,7 +1,9 @@
 # Console, collector and MCP
 
 The first console is one Go executable serving a browser UI, read-only JSON API,
-seven MCP tools, telemetry ingestion and Prometheus metrics. No database, Node
+seven read-only MCP tools, telemetry ingestion and Prometheus metrics. Optional
+provisioning adds a new-machine approval panel; see [setup modes](setup.md).
+No database, Node
 runtime, persistent volume or frontend build step is needed. One replica is
 intentional: data is in memory and collectors must reach the same replica.
 
@@ -24,8 +26,10 @@ Set GITHUB_TOKEN in the server's environment or provide token_file in its config
 Use a credential permitted to read runner inventory and Actions data in the selected
 scopes. Fine-grained permissions depend on whether the scope is an organization or
 repository; test both endpoints. Do not grant workflow execution or management
-permissions merely for this console. Private repository Actions read access is
-needed for job details. The UI and collectors never receive the token.
+permissions for monitoring alone. Enabling provisioning additionally requires
+organization runner registration permission and group reads. Private repository
+Actions read access is needed for job details. The UI and collectors never receive
+the server credential; an approved installer receives a short-lived registration token.
 
 This version reads the token at startup; restart after rotation. A manually
 supplied GitHub App installation token works until expiry but is not renewed
@@ -106,7 +110,10 @@ get_host_history (1–120 minutes) and get_fleet_health. All tools use the same 
 as the web UI. None execute commands, modify hosts, control power or cancel jobs.
 
 HTTP endpoints: GET /api/state, GET /api/history/{host-id}?minutes=120,
-POST /api/telemetry, GET /metrics and GET /healthz. MCP speaks the official SDK's
+POST /api/telemetry, GET /metrics and GET /healthz. GET /api/enrollment discovers
+provisioning; when enabled, POST /api/enrollment creates a request, and
+POST /api/enrollment/{id}/approve or /claim completes its setup handoff.
+MCP speaks the official SDK's
 protocol, not a custom approximation. /healthz checks the server process, not
 GitHub availability; adapter errors are visible in /api/state and MCP.
 
