@@ -93,7 +93,26 @@ cannot be provisioned unattended by this script; Homebrew/sudo and OS privacy
 prompts may require prior host preparation. Enabling power_management in JSON uses
 noninteractive sudo and fails if authorization is unavailable.
 
-Legacy registrations must be drained and migrated explicitly. Setup never replaces
-an existing Orchard worker or silently starts a second worker next to a detected
-legacy installation. This command is for provisioning a new worker; collector-only
-attachment to an existing worker continues to use macos/collector_service.py.
+## Existing workers and coexistence
+
+Migration is optional. When setup detects registrations under
+`~/.local/share/github-runners/*/.runner`, the wizard lists their directories and
+asks whether to install Orchard alongside them. The default is no. JSON skips
+this question and requires an explicit top-level `"allow_existing_workers": true`
+to proceed when workers are detected. This option works in both setup modes.
+Installations in arbitrary custom directories are not automatically discovered.
+
+Existing workers are not drained, reconfigured or removed. Orchard uses its own
+installation directory and needs a distinct GitHub runner name and service name.
+The coexistence option never permits replacing an existing Orchard registration.
+Each worker can accept a job independently, so concurrent builds share CPU,
+memory, signing keychains and other machine-wide resources.
+
+Coexistence setup does not install a power supervisor: it uses
+`power_management=false`. JSON with detected workers and power_management=true
+fails before installation. Manage host-wide power separately and use only one
+supervisor for the Mac. Existing power services remain untouched.
+
+To replace an old worker instead, drain and migrate it explicitly. Collector-only
+attachment to an existing worker continues to use macos/collector_service.py;
+configure its runner_dirs to report additional custom workers on the same host.

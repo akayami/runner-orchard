@@ -54,8 +54,11 @@ For a classic CLI token this may require `gh auth refresh -h github.com -s admin
 Use the narrowest permissions supported by your authentication method. The
 installer checks GitHub's published runner checksum before extracting it.
 
-Setup installs one worker per login account. Start with one account/worker per
-physical Mac. The group must allow only selected private repositories and exclude
+Setup manages one Orchard worker per login account. Start with one worker per
+physical Mac. Custom workers can coexist: opt in when prompted or set
+`allow_existing_workers=true` in setup JSON. Existing workers stay untouched;
+see [coexistence and shared power management](docs/setup.md#existing-workers-and-coexistence).
+The group must allow only selected private repositories and exclude
 public repositories. An existing group with a different access policy is refused.
 The Runner Orchard repository being public does not make untrusted public PRs
 safe to execute on a persistent machine.
@@ -143,10 +146,10 @@ python3 runner.py uninstall --config configs/local.json
 sudo /bin/bash power-service.sh uninstall
 ```
 
-Build files are retained for review. Existing installations from another project
-need explicit migration: drain and unregister the old worker, uninstall its health
-and power services, then adopt this project. Never run two power supervisors or
-accidentally register a second worker on the same laptop.
+Build files are retained for review. To replace an installation from another
+project, drain and unregister the old worker and explicitly migrate its health
+and power services. Alternatively, opt into coexistence during setup. Use one
+power supervisor per Mac and distinct directories/names for parallel workers.
 
 ## Development
 

@@ -4,5 +4,6 @@
   "name": "mac-worker-01",
   "developer_dir": "/Applications/Xcode.app/Contents/Developer",
   "power_management": false,
+  "allow_existing_workers": false,
   "install_tools": true
 }

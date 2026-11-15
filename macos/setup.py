@@ -57,6 +57,22 @@ def ask(label, default="", required=True):
         print("A value is required.")
 
 
+def existing_workers():
+    """Discover registrations in the supported legacy layout, without reading credentials."""
+    legacy = Path.home() / ".local/share/github-runners"
+    return sorted(path.parent for path in legacy.glob("*/.runner") if path.is_file())
+
+
+def check_existing_workers(cfg):
+    workers = existing_workers()
+    if workers and not cfg.get("allow_existing_workers", False):
+        raise RuntimeError("Existing workers detected; rerun the wizard to choose coexistence, "
+                           "or set allow_existing_workers=true in setup JSON. Migration is optional")
+    if workers and cfg["power_management"]:
+        raise RuntimeError("For coexistence, set power_management=false and manage host-wide "
+                           "power separately. Setup will not install another power supervisor")
+
+
 def interactive(url_hint=""):
     print("Runner Orchard setup\n1. Standalone — configure/register directly with GitHub\n2. Orchard — provision from a console and report metrics")
     while True:
@@ -85,7 +101,17 @@ def interactive(url_hint=""):
                          "developer_dir": ask("Xcode developer directory", xcode_path())}
         repos = ask("Private repository names for a NEW group, comma-separated (blank joins existing)", required=False)
         cfg["private_repositories"] = [r.strip() for r in repos.split(",") if r.strip()]
-    cfg["power_management"] = ask("Enable experimental AC-only power service? (y/N)", "n").lower() in ("y", "yes")
+    workers = existing_workers()
+    if workers:
+        print("Existing workers:\n" + "\n".join(f"  {path}" for path in workers))
+        print("Each worker can run a job at the same time, sharing this Mac's CPU, memory and signing keychains.")
+        cfg["allow_existing_workers"] = ask("Install Orchard alongside these workers? (y/N)", "n").lower() in ("y", "yes")
+        if not cfg["allow_existing_workers"]:
+            raise RuntimeError("Setup cancelled; existing workers were left untouched")
+        cfg["power_management"] = False
+        print("Existing workers will be left untouched. Host-wide power management must be managed separately.")
+    else:
+        cfg["power_management"] = ask("Enable experimental AC-only power service? (y/N)", "n").lower() in ("y", "yes")
     return normalize(cfg)
 
 
@@ -95,18 +121,19 @@ def normalize(raw):
     # Preserve the original flat runner JSON interface.
     if "organization" in raw:
         raw = {"mode": "standalone", "runner": raw}
-    allowed = {"mode", "runner", "console_url", "name", "developer_dir", "power_management", "install_tools", "collector_binary", "private_repositories"}
+    allowed = {"mode", "runner", "console_url", "name", "developer_dir", "power_management", "install_tools", "collector_binary", "private_repositories", "allow_existing_workers"}
     if set(raw) - allowed:
         raise ValueError("unknown setup configuration fields")
     mode = raw.get("mode")
     if mode not in ("standalone", "orchard"):
         raise ValueError("mode must be standalone or orchard")
     result = dict(raw)
-    for field in ("power_management", "install_tools"):
+    for field in ("power_management", "install_tools", "allow_existing_workers"):
         if not isinstance(result.get(field, False), bool):
             raise ValueError(f"{field} must be true or false")
     result.setdefault("power_management", False)
     result.setdefault("install_tools", False)
+    result.setdefault("allow_existing_workers", False)
     if mode == "standalone":
         runner.validate_config(result.get("runner"))
         if result.get("console_url"):
@@ -216,9 +243,7 @@ def install(cfg, paths, noninteractive):
         raise RuntimeError("install as a regular macOS login user on Intel or Apple silicon")
     if cfg["mode"] == "orchard" and (runner.BASE / ".runner").exists():
         raise RuntimeError("Runner is already registered. Enrollment never replaces an existing worker")
-    legacy = Path.home() / ".local/share/github-runners"
-    if legacy.exists() and any(legacy.glob("*/.runner")):
-        raise RuntimeError("Existing legacy worker detected; drain/migrate it before installing another runner")
+    check_existing_workers(cfg)
     tools(cfg, noninteractive)
     enrollment = None
     collector_binary = None

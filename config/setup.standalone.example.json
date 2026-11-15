@@ -9,5 +9,6 @@
   },
   "private_repositories": [],
   "power_management": false,
+  "allow_existing_workers": false,
   "install_tools": true
 }
