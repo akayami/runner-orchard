@@ -19,10 +19,12 @@ spec:
       labels: {app.kubernetes.io/name: {{ .Release.Name }}}
       annotations:
         checksum/config: {{ .Values.config | toJson | sha256sum | quote }}
+        orchard/rollout-nonce: {{ .Values.rolloutNonce | quote }}
     spec:
       automountServiceAccountToken: false
       nodeSelector: {{ .Values.nodeSelector | toJson }}
       tolerations: {{ .Values.tolerations | toJson }}
+      imagePullSecrets: {{ .Values.imagePullSecrets | toJson }}
       securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532}
       containers:
         - name: console

@@ -133,5 +133,6 @@ The console currently charts its in-memory buffer; use Grafana/Prometheus for
 durable history until the optional history-query adapter is implemented.
 
 Config changes roll the pod through a checksum. Tokens referenced through an
-environment Secret need a restart on rotation. Run non-root with read-only root
+environment Secret need a restart on rotation; change rolloutNonce in Helm/GitOps
+configuration to trigger it. Run non-root with read-only root
 filesystem; there are no Kubernetes API credentials or host mounts in the pod.
