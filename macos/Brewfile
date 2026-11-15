@@ -1,0 +1,5 @@
+brew "gh"
+brew "python"
+brew "xcodegen"
+brew "xcbeautify"
+brew "fastlane"

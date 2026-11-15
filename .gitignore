@@ -1,0 +1,17 @@
+.DS_Store
+__pycache__/
+*.pyc
+.build/
+dist/
+evidence/
+*.log
+.env
+.env.*
+!.env.example
+macos/configs/local*.json
+*.pem
+*.key
+.credentials*
+.runner
+.service
+machine-config.json
