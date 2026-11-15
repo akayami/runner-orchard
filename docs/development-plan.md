@@ -1,6 +1,8 @@
 # Runner Orchard development plan
 
-Status: runner tooling available; console, collector and MCP implementation planned.
+Status: runner tooling, initial web console, collector, MCP and container/Helm
+packaging implemented. Kubernetes discovery, Prometheus history queries,
+automatic GitHub App token renewal and further fleet qualification remain planned.
 
 ## Purpose
 

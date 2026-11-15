@@ -1,0 +1,12 @@
+services:
+  console:
+    build: .
+    ports: ["127.0.0.1:8787:8787"]
+    volumes: ["./config/server.container.example.json:/config/server.json:ro"]
+    environment:
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    cpus: 0.25

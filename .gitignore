@@ -15,3 +15,5 @@ macos/configs/local*.json
 .runner
 .service
 machine-config.json
+config/local*.json
+*.test

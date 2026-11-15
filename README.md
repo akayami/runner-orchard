@@ -3,14 +3,16 @@
 Put spare Macs to work as GitHub Actions runners for iOS and macOS projects.
 
 Runner Orchard provides runner setup and maintenance, local health checks, and
-experimental AC-only power management for Intel and Apple silicon Macs. A small
-fleet console, host metrics collector, and read-only MCP interface are planned;
-see the [development plan](docs/development-plan.md).
+experimental AC-only power management for Intel and Apple silicon Macs, plus a
+lightweight web console, outbound host collector and read-only MCP endpoint.
+See [console setup](docs/console.md) and the [development plan](docs/development-plan.md).
 
 ## Project status
 
 Early-stage, source-first tooling. Runner lifecycle and power-management code is
-available today. The web console and MCP server are not implemented yet.
+available today alongside the initial console/MCP implementation. History is
+bounded and in memory; no database is required. Optional Kubernetes discovery and
+durable-history querying remain future adapters.
 This project is not affiliated with Apple or GitHub.
 
 ## Quick start

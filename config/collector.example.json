@@ -1,0 +1,7 @@
+{
+  "endpoint": "http://127.0.0.1:8787/api/telemetry",
+  "name": "My Mac",
+  "id_file": "~/.local/share/runner-orchard/collector.id",
+  "runner_dirs": ["~/.local/share/runner-orchard/runner"],
+  "power_status": "/Library/Application Support/RunnerOrchard/status.json"
+}

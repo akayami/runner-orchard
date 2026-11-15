@@ -1,0 +1,53 @@
+name: Console
+on:
+  push:
+    branches: [main]
+    paths: ['cmd/**', 'internal/**', 'go.*', 'Dockerfile', 'charts/**', '.github/workflows/console.yml']
+  pull_request:
+    paths: ['cmd/**', 'internal/**', 'go.*', 'Dockerfile', 'charts/**', '.github/workflows/console.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-go@v5
+        with: {go-version-file: go.mod}
+      - run: go test -race ./...
+      - name: Cross-compile Pi server and both Mac collectors
+        run: |
+          for target in linux/arm64 linux/amd64 darwin/arm64 darwin/amd64; do
+            target_os=${target%/*}
+            target_arch=${target#*/}
+            CGO_ENABLED=0 GOOS="$target_os" GOARCH="$target_arch" go build -trimpath -o /tmp/orchard-"$target_os"-"$target_arch" ./cmd/orchard
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: orchard-binaries
+          path: /tmp/orchard-*
+  image:
+    if: github.event_name != 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions: {contents: read, packages: write}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64,linux/amd64
+          push: true
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}

@@ -1,0 +1,21 @@
+image:
+  repository: ghcr.io/akayami/runner-orchard
+  tag: latest
+  pullPolicy: IfNotPresent
+config:
+  listen: "0.0.0.0:8080"
+  allowed_hosts: [localhost, 127.0.0.1]
+  scopes: []
+  repositories: []
+  token_file: ""
+  poll_seconds: 30
+githubSecret:
+  name: ""
+  key: token
+nodeSelector: {}
+tolerations: []
+resources:
+  requests: {cpu: 10m, memory: 32Mi}
+  limits: {cpu: 250m, memory: 128Mi}
+serviceMonitor:
+  enabled: false

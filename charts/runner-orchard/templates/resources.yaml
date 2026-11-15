@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}
+data:
+  server.json: {{ .Values.config | toJson | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ .Release.Name }}}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: {{ .Release.Name }}}
+      annotations:
+        checksum/config: {{ .Values.config | toJson | sha256sum | quote }}
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector: {{ .Values.nodeSelector | toJson }}
+      tolerations: {{ .Values.tolerations | toJson }}
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532}
+      containers:
+        - name: console
+          image: {{ printf "%s:%s" .Values.image.repository (.Values.image.tag | toString) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [{name: http, containerPort: 8080}]
+          env:
+            - name: ORCHARD_POD_IP
+              valueFrom: {fieldRef: {fieldPath: status.podIP}}
+            {{- if .Values.githubSecret.name }}
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.githubSecret.name | quote }}, key: {{ .Values.githubSecret.key | quote }}}
+            {{- end }}
+          resources: {{ .Values.resources | toJson }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 10
+          volumeMounts: [{name: config, mountPath: /config, readOnly: true}]
+      volumes:
+        - name: config
+          configMap: {name: {{ .Release.Name }}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}
+  labels: {app.kubernetes.io/name: {{ .Release.Name }}}
+spec:
+  type: ClusterIP
+  selector: {app.kubernetes.io/name: {{ .Release.Name }}}
+  ports: [{name: http, port: 8080, targetPort: http}]
+{{- if .Values.serviceMonitor.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ .Release.Name }}}
+  endpoints: [{port: http, path: /metrics, interval: 15s}]
+{{- end }}

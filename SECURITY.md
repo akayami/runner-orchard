@@ -9,7 +9,7 @@ Use a dedicated standard account, trusted private repositories and restricted
 runner groups. Never schedule untrusted fork PRs on a personal or shared host.
 The root power helper must remain root-owned and separate from job execution.
 
-No web/MCP service ships yet. The planned console is read-only and unauthenticated
+The web/MCP service is read-only and unauthenticated
 for private networks; deployment must not expose ingestion or monitoring data
 publicly by default. A reverse proxy's authentication is a deployment decision.
 
