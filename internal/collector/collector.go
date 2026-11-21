@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/akayami/runner-orchard/internal/fleet"
+	"github.com/akayami/runner-orchard/internal/worker"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/host"
@@ -128,7 +129,7 @@ func output(ctx context.Context, command string, args ...string) string {
 }
 func power(ctx context.Context, path string) *fleet.Power {
 	if runtime.GOOS == "windows" {
-		return windowsPower()
+		return &fleet.Power{AC: worker.ACPower()}
 	}
 	if runtime.GOOS != "darwin" {
 		return nil

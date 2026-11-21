@@ -1,10 +1,8 @@
-package collector
+package worker
 
 import (
 	"syscall"
 	"unsafe"
-
-	"github.com/akayami/runner-orchard/internal/fleet"
 )
 
 var getSystemPowerStatus = syscall.NewLazyDLL("kernel32.dll").NewProc("GetSystemPowerStatus")
@@ -18,13 +16,12 @@ type systemPowerStatus struct {
 	batteryFullLife    uint32
 }
 
-func windowsPower() *fleet.Power {
-	power := &fleet.Power{}
+func ACPower() *bool {
 	var status systemPowerStatus
 	ok, _, _ := getSystemPowerStatus.Call(uintptr(unsafe.Pointer(&status)))
 	if ok != 0 && status.acLineStatus <= 1 {
 		ac := status.acLineStatus == 1
-		power.AC = &ac
+		return &ac
 	}
-	return power
+	return nil
 }
