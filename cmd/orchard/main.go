@@ -26,7 +26,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return fmt.Errorf("usage: orchard serve -config FILE | orchard collect -config FILE")
+		return fmt.Errorf("usage: orchard serve|collect|supervise -config FILE")
 	}
 	fs := flag.NewFlagSet(os.Args[1], flag.ContinueOnError)
 	path := fs.String("config", "", "configuration JSON file")
@@ -43,6 +43,9 @@ func run() error {
 	defer f.Close()
 	dec := json.NewDecoder(f)
 	dec.DisallowUnknownFields()
+	if os.Args[1] == "supervise" {
+		return supervise(dec)
+	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	if os.Args[1] == "collect" {
@@ -74,8 +77,8 @@ func run() error {
 		token = strings.TrimSpace(string(data))
 	}
 	state := fleet.New()
-	if c.Provisioning.Enabled && token == "" {
-		return fmt.Errorf("provisioning requires a server-side GitHub credential")
+	if (c.Provisioning.Enabled || len(c.WindowsWorkers) != 0) && token == "" {
+		return fmt.Errorf("provisioning and worker control require a server-side GitHub credential")
 	}
 	github := fleet.NewGitHub(func() string { return token })
 	go func() {

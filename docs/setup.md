@@ -69,6 +69,40 @@ The console only offers matching profiles and rejects cross-platform approvals
 before issuing registration credentials. These settings enable server-side
 enrollment once a Windows installer is available.
 
+## Windows supervisor configuration
+
+The Windows supervisor runs as the `RunnerOrchardSupervisor` service with
+`orchard.exe supervise -config FILE`. It controls one existing GitHub Actions
+runner service. The runner service must use demand start with recovery actions
+disabled, and the supervisor identity needs query, start, and stop rights on
+that service. Install both under low-privilege identities, with the supervisor
+able to inspect the runner worker process. The supervisor config uses absolute
+paths:
+
+```json
+{
+  "runner_service": "actions.runner.example.windows-laptop",
+  "runner_dir": "C:\\Orchard\\runner",
+  "lifecycle_endpoint": "https://orchard.example.test/api/windows-workers/windows-laptop",
+  "token_file": "C:\\Orchard\\private\\worker-token",
+  "pause_file": "C:\\Orchard\\private\\pause-until"
+}
+```
+
+The console's `windows_workers` list binds each `id` to its `organization`,
+numeric `runner_id`, and `token_sha256`. Store the 32 random credential bytes
+as hex in the private token file and use the SHA-256 digest of the original
+bytes in the console binding. The client requires a trusted HTTPS certificate.
+The only delegated GitHub change is adding or removing `windows-build` on
+that ID. Workflows targeting the group must require this label.
+
+The supervisor removes the routing label before stopping an idle listener.
+It waits for sustained idle and checks again immediately before requesting
+the service stop. GitHub can assign work before label removal propagates, and
+the remote busy report can lag local process state. Battery sleep can still
+interrupt assigned work. The Windows installer and local pause controls need
+to be provisioned and qualified before using this service on a worker.
+
 New-machine requests are bounded, expire after ten minutes, and are held in RAM.
 A console restart invalidates pending requests; rerun setup. Installed runner
 identity persists locally and in GitHub, so existing builds do not depend on this
