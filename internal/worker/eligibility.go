@@ -1,13 +1,12 @@
 package worker
 
-import "time"
+import (
+	"time"
 
-type Status struct {
-	State      string     `json:"state"`
-	PauseUntil *time.Time `json:"pause_until,omitempty"`
-	Busy       bool       `json:"busy"`
-	Eligible   bool       `json:"eligible"`
-}
+	"github.com/akayami/runner-orchard/internal/fleet"
+)
+
+type Status = fleet.WorkerStatus
 
 // Eligibility is the desired routing state. The service must separately confirm
 // GitHub label changes and listener state before reporting the worker online.

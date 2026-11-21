@@ -26,7 +26,13 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return fmt.Errorf("usage: orchard serve|collect|supervise -config FILE")
+		return fmt.Errorf("usage: orchard serve|collect|supervise -config FILE | orchard status|pause|resume")
+	}
+	switch os.Args[1] {
+	case "status", "pause", "resume":
+		return workerCommand(os.Args[1], os.Args[2:])
+	case "power-snapshot", "power-restore":
+		return workerPowerCommand(os.Args[1], os.Args[2:])
 	}
 	fs := flag.NewFlagSet(os.Args[1], flag.ContinueOnError)
 	path := fs.String("config", "", "configuration JSON file")

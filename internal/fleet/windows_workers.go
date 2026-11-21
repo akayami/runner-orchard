@@ -9,9 +9,10 @@ import (
 )
 
 type WindowsEligibility struct {
-	Eligible bool `json:"eligible"`
-	Busy     bool `json:"busy"`
-	Online   bool `json:"online"`
+	Eligible bool  `json:"eligible"`
+	Busy     bool  `json:"busy"`
+	Online   bool  `json:"online"`
+	RunnerID int64 `json:"runner_id"`
 }
 
 // SetWindowsEligibility changes only the Windows routing label on this runner.
@@ -72,5 +73,37 @@ func (g *GitHub) SetWindowsEligibility(ctx context.Context, org string, id int64
 			return WindowsEligibility{}, fmt.Errorf("runner label request failed (HTTP %d)", resp.StatusCode)
 		}
 	}
-	return WindowsEligibility{Eligible: eligible, Busy: runner.Busy, Online: runner.Status == "online"}, nil
+	return WindowsEligibility{Eligible: eligible, Busy: runner.Busy, Online: runner.Status == "online", RunnerID: id}, nil
+}
+
+// RemoveWindowsWorker only removes an offline, idle, de-routed runner.
+func (g *GitHub) RemoveWindowsWorker(ctx context.Context, org string, id int64) error {
+	status, err := g.SetWindowsEligibility(ctx, org, id, false)
+	if err != nil {
+		return err
+	}
+	if status.Busy || status.Online {
+		return fmt.Errorf("Windows runner must be offline before removal")
+	}
+	path := fmt.Sprintf("/orgs/%s/actions/runners/%d", org, id)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, g.Base+path, nil)
+	if err != nil {
+		return err
+	}
+	token := g.Token()
+	if token == "" {
+		return fmt.Errorf("console GitHub credential required")
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "runner-orchard")
+	resp, err := g.Client.Do(req)
+	if err != nil {
+		return fmt.Errorf("runner removal request unavailable")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("runner removal failed (HTTP %d)", resp.StatusCode)
+	}
+	return nil
 }

@@ -34,25 +34,34 @@ type Power struct {
 	Active    *bool `json:"active,omitempty"`
 	Healthy   *bool `json:"healthy,omitempty"`
 }
+type WorkerStatus struct {
+	State        string     `json:"state"`
+	PauseUntil   *time.Time `json:"pause_until,omitempty"`
+	Busy         bool       `json:"busy"`
+	Eligible     bool       `json:"eligible"`
+	PowerWarning string     `json:"power_warning,omitempty"`
+}
+
 type Report struct {
-	Schema         int         `json:"schema"`
-	ID             string      `json:"id"`
-	Name           string      `json:"name"`
-	OS             string      `json:"os"`
-	OSVersion      string      `json:"os_version,omitempty"`
-	Arch           string      `json:"arch"`
-	Cores          int         `json:"cores"`
-	CPU            *float64    `json:"cpu,omitempty"`
-	CPUPeak        *float64    `json:"cpu_peak,omitempty"`
-	Memory         *Memory     `json:"memory,omitempty"`
-	Swap           *Swap       `json:"swap,omitempty"`
-	Disk           *Disk       `json:"disk,omitempty"`
-	Load           *float64    `json:"load,omitempty"`
-	Uptime         uint64      `json:"uptime_seconds"`
-	Power          *Power      `json:"power,omitempty"`
-	Runners        []RunnerRef `json:"runners"`
-	Drained        *bool       `json:"drained,omitempty"`
-	ServiceHealthy *bool       `json:"service_healthy,omitempty"`
+	Schema         int           `json:"schema"`
+	ID             string        `json:"id"`
+	Name           string        `json:"name"`
+	OS             string        `json:"os"`
+	OSVersion      string        `json:"os_version,omitempty"`
+	Arch           string        `json:"arch"`
+	Cores          int           `json:"cores"`
+	CPU            *float64      `json:"cpu,omitempty"`
+	CPUPeak        *float64      `json:"cpu_peak,omitempty"`
+	Memory         *Memory       `json:"memory,omitempty"`
+	Swap           *Swap         `json:"swap,omitempty"`
+	Disk           *Disk         `json:"disk,omitempty"`
+	Load           *float64      `json:"load,omitempty"`
+	Uptime         uint64        `json:"uptime_seconds"`
+	Power          *Power        `json:"power,omitempty"`
+	Worker         *WorkerStatus `json:"worker,omitempty"`
+	Runners        []RunnerRef   `json:"runners"`
+	Drained        *bool         `json:"drained,omitempty"`
+	ServiceHealthy *bool         `json:"service_healthy,omitempty"`
 }
 type Host struct {
 	Report
@@ -126,6 +135,17 @@ func finite(p *float64) bool {
 func (s *State) Ingest(r Report) error {
 	if r.Schema != 1 || !identifier.MatchString(r.ID) || len(r.Name) < 1 || len(r.Name) > 128 || len(r.OS) > 32 || len(r.OSVersion) > 128 || len(r.Arch) > 32 || r.Cores < 1 || r.Cores > 4096 || len(r.Runners) > 32 || !finite(r.CPU) || !finite(r.CPUPeak) {
 		return errors.New("invalid host report")
+	}
+	if r.Worker != nil {
+		if len(r.Worker.PowerWarning) > 128 {
+			return errors.New("invalid worker power warning")
+		}
+		switch r.Worker.State {
+		case "starting", "online", "eligible", "paused", "pause-requested", "checking-eligibility",
+			"draining-paused", "draining-battery", "unknown-power", "offline-error":
+		default:
+			return errors.New("invalid worker status")
+		}
 	}
 	if r.Load != nil && (math.IsNaN(*r.Load) || math.IsInf(*r.Load, 0) || *r.Load < 0 || *r.Load > 1e6) {
 		return errors.New("invalid load")

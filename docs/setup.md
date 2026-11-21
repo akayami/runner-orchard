@@ -67,7 +67,7 @@ and should refer to a separate group restricted to selected private repositories
 Windows requests use `"architecture": "x64"` and omit `developer_dir`.
 The console only offers matching profiles and rejects cross-platform approvals
 before issuing registration credentials. These settings enable server-side
-enrollment once a Windows installer is available.
+enrollment for the [native Windows installer](../windows/README.md).
 
 ## Windows supervisor configuration
 
@@ -93,15 +93,16 @@ The console's `windows_workers` list binds each `id` to its `organization`,
 numeric `runner_id`, and `token_sha256`. Store the 32 random credential bytes
 as hex in the private token file and use the SHA-256 digest of the original
 bytes in the console binding. The client requires a trusted HTTPS certificate.
-The only delegated GitHub change is adding or removing `windows-build` on
-that ID. Workflows targeting the group must require this label.
+The lifecycle authorization can add or remove `windows-build` on that ID and
+can unregister it after it goes offline. Workflows targeting the group must
+require this label.
 
 The supervisor removes the routing label before stopping an idle listener.
 It waits for sustained idle and checks again immediately before requesting
 the service stop. GitHub can assign work before label removal propagates, and
 the remote busy report can lag local process state. Battery sleep can still
-interrupt assigned work. The Windows installer and local pause controls need
-to be provisioned and qualified before using this service on a worker.
+interrupt assigned work. Use the [Windows bootstrap and qualification steps](../windows/README.md)
+to install the supervisor, then verify these transitions on the target laptop.
 
 New-machine requests are bounded, expire after ten minutes, and are held in RAM.
 A console restart invalidates pending requests; rerun setup. Installed runner

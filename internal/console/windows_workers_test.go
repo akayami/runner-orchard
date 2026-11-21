@@ -60,7 +60,7 @@ func TestWindowsWorkerControlIsBoundToOneRunner(t *testing.T) {
 		t.Fatal("invalid request reached GitHub")
 	}
 	w := request("laptop", "Bearer "+token, `{"eligible":false}`)
-	if w.Code != 200 || w.Body.String() != "{\"eligible\":false,\"busy\":true,\"online\":true}\n" || requests.Load() != 2 {
+	if w.Code != 200 || w.Body.String() != "{\"eligible\":false,\"busy\":true,\"online\":true,\"runner_id\":42}\n" || requests.Load() != 2 {
 		t.Fatal(w.Code, w.Body.String(), requests.Load())
 	}
 }

@@ -28,11 +28,12 @@ import (
 )
 
 type Config struct {
-	Endpoint    string   `json:"endpoint"`
-	Name        string   `json:"name"`
-	IDFile      string   `json:"id_file"`
-	RunnerDirs  []string `json:"runner_dirs"`
-	PowerStatus string   `json:"power_status"`
+	Endpoint     string               `json:"endpoint"`
+	Name         string               `json:"name"`
+	IDFile       string               `json:"id_file"`
+	RunnerDirs   []string             `json:"runner_dirs"`
+	PowerStatus  string               `json:"power_status"`
+	WorkerStatus func() worker.Status `json:"-"`
 }
 
 func expand(p string) string {
@@ -248,6 +249,10 @@ func Run(ctx context.Context, c Config) error {
 			}
 			r.Uptime, _ = host.UptimeWithContext(ctx)
 			r.Power = power(ctx, c.PowerStatus)
+			if c.WorkerStatus != nil {
+				status := c.WorkerStatus()
+				r.Worker = &status
+			}
 			data, e := json.Marshal(r)
 			if e != nil {
 				return fmt.Errorf("cannot encode host telemetry")

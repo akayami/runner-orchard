@@ -67,8 +67,9 @@ func registerWindowsWorkers(mux *http.ServeMux, bindings []WindowsWorker, github
 		}
 		var input struct {
 			Eligible *bool `json:"eligible"`
+			Remove   bool  `json:"remove,omitempty"`
 		}
-		if err := decodeBody(r, &input); err != nil || input.Eligible == nil {
+		if err := decodeBody(r, &input); err != nil || (input.Eligible != nil) == input.Remove {
 			http.Error(w, "invalid lifecycle request", http.StatusBadRequest)
 			return
 		}
@@ -80,6 +81,14 @@ func registerWindowsWorkers(mux *http.ServeMux, bindings []WindowsWorker, github
 			return
 		}
 		defer lock.Unlock()
+		if input.Remove {
+			if err := github.RemoveWindowsWorker(ctx, worker.Organization, worker.RunnerID); err != nil {
+				http.Error(w, "GitHub worker removal unavailable", http.StatusBadGateway)
+				return
+			}
+			jsonResponse(w, map[string]bool{"removed": true})
+			return
+		}
 		result, err := github.SetWindowsEligibility(ctx, worker.Organization, worker.RunnerID, *input.Eligible)
 		if err != nil {
 			http.Error(w, "GitHub worker control unavailable", http.StatusBadGateway)

@@ -3,7 +3,6 @@ package worker
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -52,12 +51,19 @@ func (p PauseFile) Pause(now time.Time, duration *time.Duration) (time.Time, err
 		return time.Time{}, errors.New("pause duration must be positive")
 	}
 	expires := now.Add(length).UTC()
-	f, err := os.CreateTemp(filepath.Dir(string(p)), ".pause-*")
-	if err != nil {
+	if err := writeState(string(p), []byte(expires.Format(time.RFC3339Nano)+"\n")); err != nil {
 		return time.Time{}, err
 	}
+	return expires, nil
+}
+
+func writeState(path string, data []byte) error {
+	f, err := os.CreateTemp(filepath.Dir(path), ".orchard-state-*")
+	if err != nil {
+		return err
+	}
 	defer os.Remove(f.Name())
-	_, err = fmt.Fprintln(f, expires.Format(time.RFC3339Nano))
+	_, err = f.Write(data)
 	if err == nil {
 		err = f.Sync()
 	}
@@ -65,12 +71,9 @@ func (p PauseFile) Pause(now time.Time, duration *time.Duration) (time.Time, err
 		err = closeErr
 	}
 	if err != nil {
-		return time.Time{}, err
+		return err
 	}
-	if err := os.Rename(f.Name(), string(p)); err != nil {
-		return time.Time{}, err
-	}
-	return expires, nil
+	return os.Rename(f.Name(), path)
 }
 
 func (p PauseFile) Resume() error {

@@ -3,6 +3,7 @@ module github.com/akayami/runner-orchard
 go 1.27.2
 
 require (
+	github.com/Microsoft/go-winio v0.6.2
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/shirou/gopsutil/v4 v4.26.10
 	golang.org/x/sys v0.48.0

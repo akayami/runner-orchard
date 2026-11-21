@@ -40,7 +40,7 @@ func (s *Supervisor) Step(ctx context.Context, now time.Time) (Status, error) {
 		s.idleSince = time.Time{}
 		// A stopped listener first confirms the label is absent. Recheck
 		// power immediately before starting it.
-		if !running && Eligibility(now, until, s.Power(), true, busy).Eligible {
+		if !running && !busy && !remote.Busy && Eligibility(now, until, s.Power(), true, busy).Eligible {
 			if err := s.Listener.Start(); err != nil {
 				return failed(desired, err)
 			}
