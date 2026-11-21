@@ -18,11 +18,11 @@ func TestEnrollmentApprovalClaimAndCredentialIsolation(t *testing.T) {
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/orgs/example/actions/runner-groups":
-			fmt.Fprint(w, `{"runner_groups":[{"id":1,"name":"apple-builds","visibility":"selected","allows_public_repositories":false}]}`)
+			fmt.Fprint(w, `{"runner_groups":[{"id":1,"name":"apple-builds","visibility":"selected"},{"id":2,"name":"windows-builds","visibility":"selected"}]}`)
 		case "/orgs/example/actions/runners":
 			fmt.Fprint(w, `{"total_count":0,"runners":[]}`)
 		case "/orgs/example/actions/runners/downloads":
-			fmt.Fprintf(w, `[{"os":"osx","architecture":"arm64","download_url":"https://github.com/actions/runner/releases/download/v0/test.tar.gz","sha256_checksum":"%s"}]`, strings.Repeat("a", 64))
+			fmt.Fprintf(w, `[{"os":"osx","architecture":"arm64","download_url":"https://github.com/actions/runner/releases/download/v0/test.tar.gz","sha256_checksum":"%s"},{"os":"win","architecture":"x64","download_url":"https://github.com/actions/runner/releases/download/v0/test.zip","sha256_checksum":"%s"}]`, strings.Repeat("a", 64), strings.Repeat("b", 64))
 		case "/orgs/example/actions/runners/registration-token":
 			issued++
 			w.WriteHeader(201)
@@ -34,7 +34,13 @@ func TestEnrollmentApprovalClaimAndCredentialIsolation(t *testing.T) {
 	defer api.Close()
 	github := fleet.NewGitHub(func() string { return "synthetic-server-credential" })
 	github.Base = api.URL
-	cfg := Config{AllowedHosts: []string{"localhost"}, Provisioning: Provisioning{Enabled: true, Profiles: []Profile{{ID: "apple", Organization: "example", Group: "apple-builds", Labels: []string{"apple-build"}}}}}
+	cfg := Config{AllowedHosts: []string{"localhost"}, Provisioning: Provisioning{Enabled: true, Profiles: []Profile{
+		{ID: "apple", Organization: "example", Group: "apple-builds", Labels: []string{"apple-build"}},
+		{ID: "windows", OS: "win", Organization: "example", Group: "windows-builds", Labels: []string{"windows-build"}},
+	}}}
+	if err := cfg.Provisioning.validate(); err != nil {
+		t.Fatal(err)
+	}
 	h := Handler(fleet.New(), cfg, github)
 	request := func(method, path string, data any, secret string) *httptest.ResponseRecorder {
 		var b bytes.Buffer
@@ -87,6 +93,25 @@ func TestEnrollmentApprovalClaimAndCredentialIsolation(t *testing.T) {
 	w = request("POST", path+"/claim", nil, secret)
 	if issued != 1 || strings.Contains(w.Body.String(), "registration_token") {
 		t.Fatal("credential claimed more than once")
+	}
+	windows := map[string]string{"name": "new-windows", "os": "win", "architecture": "arm64", "secret": secret}
+	if w = request("POST", "/api/enrollment", windows, ""); w.Code != 400 {
+		t.Fatal("Windows ARM64 accepted")
+	}
+	windows["architecture"] = "x64"
+	w = request("POST", "/api/enrollment", windows, "")
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &result) != nil {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	path = "/api/enrollment/" + result.ID
+	if w = request("POST", path+"/approve", map[string]string{"profile": "apple", "name": "new-windows"}, ""); w.Code != 400 || issued != 1 {
+		t.Fatal("cross-platform approval accepted")
+	}
+	if w = request("POST", path+"/approve", map[string]string{"profile": "windows", "name": "new-windows"}, ""); w.Code != 204 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w = request("POST", path+"/claim", nil, secret); w.Code != 200 || issued != 2 || !strings.Contains(w.Body.String(), "test.zip") {
+		t.Fatal(w.Code, w.Body.String())
 	}
 }
 

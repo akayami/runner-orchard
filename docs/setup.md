@@ -60,6 +60,15 @@ and group reads. Provisioning is disabled by default; monitoring credentials nee
 not be upgraded unless an operator enables it. Host architecture labels are
 assigned by GitHub and cannot be supplied as capability labels in a profile.
 
+Provisioning profiles and enrollment requests use GitHub package OS values.
+Omitting `os` defaults to `osx` for existing Mac configurations. A Windows
+profile uses `"os": "win"`, requires the `windows-build` capability,
+and should refer to a separate group restricted to selected private repositories.
+Windows requests use `"architecture": "x64"` and omit `developer_dir`.
+The console only offers matching profiles and rejects cross-platform approvals
+before issuing registration credentials. These settings enable server-side
+enrollment once a Windows installer is available.
+
 New-machine requests are bounded, expire after ten minutes, and are held in RAM.
 A console restart invalidates pending requests; rerun setup. Installed runner
 identity persists locally and in GitHub, so existing builds do not depend on this

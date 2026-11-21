@@ -19,6 +19,7 @@ import (
 
 type Profile struct {
 	ID           string   `json:"id"`
+	OS           string   `json:"os,omitempty"`
 	Organization string   `json:"organization"`
 	Group        string   `json:"runner_group"`
 	Labels       []string `json:"labels"`
@@ -44,21 +45,33 @@ func (p Provisioning) validate() error {
 			return fmt.Errorf("invalid provisioning profile")
 		}
 		seen[profile.ID] = true
+		var capability string
+		switch fleet.RunnerPackageOS(profile.OS) {
+		case "osx":
+			capability = "apple-build"
+		case "win":
+			capability = "windows-build"
+		default:
+			return fmt.Errorf("unsupported provisioning profile OS")
+		}
 		required := false
 		for _, label := range profile.Labels {
 			if !safeLabel.MatchString(label) {
 				return fmt.Errorf("invalid profile label")
 			}
 			switch strings.ToLower(label) {
-			case "arm64", "x64", "arm", "macos", "linux", "windows", "self-hosted":
+			case "arm64", "x64", "x86", "arm", "macos", "linux", "windows", "self-hosted":
 				return fmt.Errorf("host labels are assigned by GitHub, not profiles")
 			}
-			if label == "apple-build" {
+			if (strings.EqualFold(label, "apple-build") || strings.EqualFold(label, "windows-build")) && label != capability {
+				return fmt.Errorf("profile capability must match its OS")
+			}
+			if label == capability {
 				required = true
 			}
 		}
 		if !required {
-			return fmt.Errorf("profile must include apple-build")
+			return fmt.Errorf("profile must include %s", capability)
 		}
 	}
 	return nil
@@ -67,6 +80,7 @@ func (p Provisioning) validate() error {
 type Enrollment struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
+	OS        string    `json:"os"`
 	Arch      string    `json:"architecture"`
 	Developer string    `json:"developer_dir"`
 	Created   time.Time `json:"created"`
@@ -147,12 +161,29 @@ func registerEnrollment(mux *http.ServeMux, c Config, g *fleet.GitHub) {
 	mux.HandleFunc("POST /api/enrollment", func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Name      string `json:"name"`
+			OS        string `json:"os"`
 			Arch      string `json:"architecture"`
 			Developer string `json:"developer_dir"`
 			Secret    string `json:"secret"`
 		}
-		if decodeBody(r, &in) != nil || !safeName.MatchString(in.Name) || (in.Arch != "arm64" && in.Arch != "x64") || !strings.HasPrefix(in.Developer, "/") || len(in.Developer) > 512 || strings.ContainsAny(in.Developer, "\r\n") || len(in.Secret) != 64 {
+		if decodeBody(r, &in) != nil || !safeName.MatchString(in.Name) || len(in.Secret) != 64 {
 			http.Error(w, "invalid enrollment", 400)
+			return
+		}
+		in.OS = fleet.RunnerPackageOS(in.OS)
+		switch in.OS {
+		case "osx":
+			if (in.Arch != "arm64" && in.Arch != "x64") || !strings.HasPrefix(in.Developer, "/") || len(in.Developer) > 512 || strings.ContainsAny(in.Developer, "\r\n") {
+				http.Error(w, "macOS enrollment requires arm64 or x64 and a developer directory", 400)
+				return
+			}
+		case "win":
+			if in.Arch != "x64" || in.Developer != "" {
+				http.Error(w, "Windows enrollment requires x64 and no developer directory", 400)
+				return
+			}
+		default:
+			http.Error(w, "unsupported enrollment OS", 400)
 			return
 		}
 		secret, err := hex.DecodeString(in.Secret)
@@ -168,7 +199,7 @@ func registerEnrollment(mux *http.ServeMux, c Config, g *fleet.GitHub) {
 			return
 		}
 		id := randomID()
-		e.entries[id] = &Enrollment{ID: id, Name: in.Name, Arch: in.Arch, Developer: in.Developer, Created: e.now().UTC(), Status: "pending", secret: sha256.Sum256(secret)}
+		e.entries[id] = &Enrollment{ID: id, Name: in.Name, OS: in.OS, Arch: in.Arch, Developer: in.Developer, Created: e.now().UTC(), Status: "pending", secret: sha256.Sum256(secret)}
 		jsonResponse(w, map[string]any{"id": id, "expires_in": 600})
 	})
 	mux.HandleFunc("POST /api/enrollment/{id}/approve", func(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +211,8 @@ func registerEnrollment(mux *http.ServeMux, c Config, g *fleet.GitHub) {
 			http.Error(w, "invalid approval", 400)
 			return
 		}
-		if _, ok := e.profile(in.Profile); !ok {
+		profile, ok := e.profile(in.Profile)
+		if !ok {
 			http.Error(w, "unknown provisioning profile", 400)
 			return
 		}
@@ -190,6 +222,10 @@ func registerEnrollment(mux *http.ServeMux, c Config, g *fleet.GitHub) {
 		item, ok := e.entries[r.PathValue("id")]
 		if !ok || item.Status != "pending" {
 			http.Error(w, "request unavailable", 409)
+			return
+		}
+		if fleet.RunnerPackageOS(profile.OS) != item.OS {
+			http.Error(w, "profile OS does not match enrollment OS", 400)
 			return
 		}
 		item.Profile = in.Profile
@@ -228,7 +264,7 @@ func registerEnrollment(mux *http.ServeMux, c Config, g *fleet.GitHub) {
 		item.Status = "claiming"
 		e.mu.Unlock()
 		profile, _ := e.profile(copy.Profile)
-		token, pkg, err := g.Provision(r.Context(), profile.Organization, profile.Group, copy.Name, copy.Arch)
+		token, pkg, err := g.ProvisionPlatform(r.Context(), profile.Organization, profile.Group, copy.Name, copy.OS, copy.Arch)
 		e.mu.Lock()
 		if err != nil {
 			item.Status = "failed"

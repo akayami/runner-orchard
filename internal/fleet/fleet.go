@@ -39,6 +39,7 @@ type Report struct {
 	ID             string      `json:"id"`
 	Name           string      `json:"name"`
 	OS             string      `json:"os"`
+	OSVersion      string      `json:"os_version,omitempty"`
 	Arch           string      `json:"arch"`
 	Cores          int         `json:"cores"`
 	CPU            *float64    `json:"cpu,omitempty"`
@@ -123,7 +124,7 @@ func finite(p *float64) bool {
 	return p == nil || (!math.IsNaN(*p) && !math.IsInf(*p, 0) && *p >= 0 && *p <= 100)
 }
 func (s *State) Ingest(r Report) error {
-	if r.Schema != 1 || !identifier.MatchString(r.ID) || len(r.Name) < 1 || len(r.Name) > 128 || len(r.OS) > 32 || len(r.Arch) > 32 || r.Cores < 1 || r.Cores > 4096 || len(r.Runners) > 32 || !finite(r.CPU) || !finite(r.CPUPeak) {
+	if r.Schema != 1 || !identifier.MatchString(r.ID) || len(r.Name) < 1 || len(r.Name) > 128 || len(r.OS) > 32 || len(r.OSVersion) > 128 || len(r.Arch) > 32 || r.Cores < 1 || r.Cores > 4096 || len(r.Runners) > 32 || !finite(r.CPU) || !finite(r.CPUPeak) {
 		return errors.New("invalid host report")
 	}
 	if r.Load != nil && (math.IsNaN(*r.Load) || math.IsInf(*r.Load, 0) || *r.Load < 0 || *r.Load > 1e6) {

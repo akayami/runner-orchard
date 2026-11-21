@@ -2,10 +2,12 @@ package fleet
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 type Group struct {
@@ -40,10 +42,23 @@ func (g *GitHub) Groups(ctx context.Context, org string) ([]Group, error) {
 	}
 	return nil, fmt.Errorf("group pagination limit exceeded")
 }
+
+// RunnerPackageOS preserves the implicit macOS default used by older clients.
+func RunnerPackageOS(os string) string {
+	if os == "" {
+		return "osx"
+	}
+	return os
+}
+
 func (g *GitHub) Provision(ctx context.Context, org, group, name, arch string) (string, RunnerPackage, error) {
+	return g.ProvisionPlatform(ctx, org, group, name, "osx", arch)
+}
+
+func (g *GitHub) ProvisionPlatform(ctx context.Context, org, group, name, os, arch string) (string, RunnerPackage, error) {
 	var empty RunnerPackage
-	if arch != "arm64" && arch != "x64" {
-		return "", empty, fmt.Errorf("unsupported architecture")
+	if (os != "osx" && os != "win") || (arch != "x64" && !(os == "osx" && arch == "arm64")) {
+		return "", empty, fmt.Errorf("unsupported runner platform %s/%s", os, arch)
 	}
 	groups, err := g.Groups(ctx, org)
 	if err != nil {
@@ -63,7 +78,7 @@ func (g *GitHub) Provision(ctx context.Context, org, group, name, arch string) (
 		return "", empty, err
 	}
 	for _, r := range runners {
-		if r.Name == name {
+		if strings.EqualFold(r.Name, name) {
 			return "", empty, fmt.Errorf("runner name already exists; existing registrations are never replaced")
 		}
 	}
@@ -73,13 +88,13 @@ func (g *GitHub) Provision(ctx context.Context, org, group, name, arch string) (
 	}
 	var pkg RunnerPackage
 	for _, p := range packages {
-		if p.OS == "osx" && p.Architecture == arch {
+		if p.OS == os && p.Architecture == arch {
 			pkg = p
 			break
 		}
 	}
-	if pkg.URL == "" || len(pkg.SHA256) != 64 {
-		return "", empty, fmt.Errorf("verified macOS runner package unavailable")
+	if checksum, err := hex.DecodeString(pkg.SHA256); pkg.URL == "" || err != nil || len(checksum) != 32 {
+		return "", empty, fmt.Errorf("verified %s/%s runner package unavailable", os, arch)
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()

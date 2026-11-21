@@ -127,6 +127,9 @@ func output(ctx context.Context, command string, args ...string) string {
 	return string(data)
 }
 func power(ctx context.Context, path string) *fleet.Power {
+	if runtime.GOOS == "windows" {
+		return windowsPower()
+	}
 	if runtime.GOOS != "darwin" {
 		return nil
 	}
@@ -161,6 +164,19 @@ func power(ctx context.Context, path string) *fleet.Power {
 	}
 	return p
 }
+
+func diskPath(runnerDirs []string) string {
+	if runtime.GOOS != "windows" {
+		return "/"
+	}
+	for _, dir := range runnerDirs {
+		if info, err := os.Stat(expand(dir)); err == nil && info.IsDir() {
+			return expand(dir)
+		}
+	}
+	return ""
+}
+
 func Run(ctx context.Context, c Config) error {
 	u, err := url.Parse(c.Endpoint)
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil {
@@ -193,6 +209,10 @@ func Run(ctx context.Context, c Config) error {
 	next := time.Now().Add(2 * time.Second)
 	failures := 0
 	wasFailing := false
+	var osVersion string
+	if runtime.GOOS == "windows" {
+		_, _, osVersion, _ = host.PlatformInformationWithContext(ctx)
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -210,15 +230,17 @@ func Run(ctx context.Context, c Config) error {
 				continue
 			}
 			refs, drained := runnerRefs(c.RunnerDirs)
-			r := fleet.Report{Schema: 1, ID: id, Name: c.Name, OS: runtime.GOOS, Arch: runtime.GOARCH, Cores: runtime.NumCPU(), CPU: latest, CPUPeak: peak, Runners: refs, Drained: drained}
+			r := fleet.Report{Schema: 1, ID: id, Name: c.Name, OS: runtime.GOOS, OSVersion: osVersion, Arch: runtime.GOARCH, Cores: runtime.NumCPU(), CPU: latest, CPUPeak: peak, Runners: refs, Drained: drained}
 			if m, e := mem.VirtualMemoryWithContext(ctx); e == nil {
 				r.Memory = &fleet.Memory{Total: m.Total, Used: m.Used, Available: m.Available}
 			}
 			if s, e := mem.SwapMemoryWithContext(ctx); e == nil {
 				r.Swap = &fleet.Swap{Used: s.Used, Total: s.Total, In: s.Sin, Out: s.Sout}
 			}
-			if d, e := disk.UsageWithContext(ctx, "/"); e == nil {
-				r.Disk = &fleet.Disk{Total: d.Total, Free: d.Free}
+			if path := diskPath(c.RunnerDirs); path != "" {
+				if d, e := disk.UsageWithContext(ctx, path); e == nil {
+					r.Disk = &fleet.Disk{Total: d.Total, Free: d.Free}
+				}
 			}
 			if l, e := load.AvgWithContext(ctx); e == nil {
 				r.Load = &l.Load1
