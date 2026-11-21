@@ -1,24 +1,32 @@
 name: Checks
 on:
-  push:
-  pull_request:
   workflow_dispatch:
+    inputs:
+      reviewed_sha:
+        description: Full commit SHA reviewed by a maintainer
+        required: true
+        type: string
 permissions:
   contents: read
 jobs:
   python:
-    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && inputs.reviewed_sha == github.sha
+    runs-on: akayami-ops-arc
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
       - run: python3 -m unittest discover -s macos -p 'test_*.py' -v
       - run: bash -n install.sh macos/install.sh macos/power-service.sh
   swift:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: macos-latest
+    if: github.ref == 'refs/heads/main' && inputs.reviewed_sha == github.sha
+    runs-on:
+      group: apple-builds
+      labels: [self-hosted, macOS, ARM64, apple-build]
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
       - run: xcrun swiftc -swift-version 5 -O macos/ApplePower.swift -o "$RUNNER_TEMP/runner-orchard-power"
