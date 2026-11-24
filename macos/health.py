@@ -26,7 +26,8 @@ def snapshot():
         state = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{label}"],
                                capture_output=True, text=True, timeout=10)
         drained = (BASE / ".drained").exists()
-        if not drained and (state.returncode or "state = running" not in state.stdout):
+        power_stopped = (Path.home() / ".local/share/runner-orchard/power-routing/power-stopped").exists()
+        if not drained and not power_stopped and (state.returncode or "state = running" not in state.stdout):
             problems.append("Runner service is not running")
     except (OSError, ValueError, subprocess.SubprocessError):
         registration, drained = {}, False

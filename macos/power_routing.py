@@ -153,7 +153,16 @@ def install(args):
     domain = f"gui/{os.getuid()}"
     if launch("print", domain+"/"+AGENT, check=False).returncode == 0:
         launch("bootout", domain+"/"+AGENT)
+    target = domain + "/" + AGENT
+    launch("enable", target)
     launch("bootstrap", domain, agent)
+    launch("kickstart", target)
+    for _ in range(20):
+        state = launch("print", target).stdout.splitlines()
+        if any(line == b"\tstate = running" for line in state):
+            return
+        time.sleep(1)
+    raise RuntimeError("Power agent did not start; inspect launchctl and watch.log")
 
 
 def main():

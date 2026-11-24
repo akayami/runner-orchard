@@ -251,7 +251,11 @@ def resume(config):
     # config.sh tolerates duplicates of built-in labels; the REST API rejects them.
     defaults = {"self-hosted", "macos", "linux", "windows", "arm", "arm64", "x64"}
     custom = [label for label in config["labels"] if label.lower() not in defaults]
-    github(endpoint + "/labels", "POST", {"labels": custom})
+    routing = Path.home() / ".local/share/runner-orchard/power-routing/config.json"
+    if routing.is_file() and Path(json.loads(routing.read_text())["root"]) == BASE:
+        custom = [label for label in custom if label.lower() != "apple-build"]
+    if custom:
+        github(endpoint + "/labels", "POST", {"labels": custom})
     service(config, "start")
     (BASE / ".drained").unlink(missing_ok=True)
 
