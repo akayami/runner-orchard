@@ -29,7 +29,8 @@ type Config struct {
 	TokenFile      string          `json:"token_file"`
 	PollSeconds    int             `json:"poll_seconds"`
 	Provisioning   Provisioning    `json:"provisioning"`
-	WindowsWorkers []WindowsWorker `json:"windows_workers,omitempty"`
+	MacWorkers     []WorkerBinding `json:"mac_workers,omitempty"`
+	WindowsWorkers []WorkerBinding `json:"windows_workers,omitempty"`
 }
 
 func (c Config) Validate() error {
@@ -55,7 +56,7 @@ func (c Config) Validate() error {
 			return fmt.Errorf("invalid repository")
 		}
 	}
-	if err := validateWindowsWorkers(c.WindowsWorkers); err != nil {
+	if err := validateWorkerBindings(append(append([]WorkerBinding{}, c.WindowsWorkers...), c.MacWorkers...)); err != nil {
 		return err
 	}
 	return c.Provisioning.validate()
@@ -123,7 +124,8 @@ func Handler(state *fleet.State, config Config, github ...*fleet.GitHub) http.Ha
 		provisioner = github[0]
 	}
 	registerEnrollment(mux, config, provisioner)
-	registerWindowsWorkers(mux, config.WindowsWorkers, provisioner)
+	registerWorkerControl(mux, config.WindowsWorkers, provisioner, "windows")
+	registerWorkerControl(mux, config.MacWorkers, provisioner, "mac")
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { jsonResponse(w, map[string]string{"status": "ok"}) })
 	mux.HandleFunc("GET /api/state", func(w http.ResponseWriter, r *http.Request) { jsonResponse(w, state.Snapshot()) })
 	mux.HandleFunc("GET /api/history/{id}", func(w http.ResponseWriter, r *http.Request) {

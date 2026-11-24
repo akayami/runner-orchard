@@ -143,3 +143,23 @@ Config changes roll the pod through a checksum. Tokens referenced through an
 environment Secret need a restart on rotation; change rolloutNonce in Helm/GitOps
 configuration to trigger it. Run non-root with read-only root
 filesystem; there are no Kubernetes API credentials or host mounts in the pod.
+
+### Power-aware runners
+
+Orchard-managed Apple and Windows pool workflows require `apple-build` or
+`windows-build` on every job. The host supervisor withdraws that routing label
+on battery (also for unknown power) and keeps the listener alive while work is
+assigned. After the runner is idle it takes the listener offline. Connecting
+power restores the pool automatically unless the operator drained or paused it.
+Runner availability distinguishes ready, busy, battery and finishing on battery.
+The raw GitHub online/busy fields remain available in the state API.
+
+For a Mac, provision a unique 32-byte lifecycle credential in the operator vault.
+Add a `mac_workers` binding with the registration name, organization, immutable
+runner ID and SHA-256 of the decoded credential bytes, matching the Windows
+binding format. In the logged-in runner account, pipe its hex token privately to
+`python3 macos/power_routing.py install --runner-dir "$RUNNER_DIR" --console "$ORCHARD_HTTPS" --ca "$ORCHARD_CA"`.
+The power agent runs independently of the build listener and preserves the
+runner's signing session and other labels. Install the binding and supervisor
+when commissioning another Mac. The Windows installer supplies its SCM
+supervisor. The console never grants routing permissions from telemetry alone.

@@ -4,7 +4,9 @@ import (
 	"errors"
 	"math"
 	"regexp"
+	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -77,14 +79,15 @@ type Point struct {
 	Disk   *Disk     `json:"disk,omitempty"`
 }
 type Runner struct {
-	Scope  string   `json:"scope"`
-	ID     int64    `json:"id"`
-	Name   string   `json:"name"`
-	OS     string   `json:"os"`
-	Status string   `json:"status"`
-	Busy   bool     `json:"busy"`
-	Labels []string `json:"labels"`
-	HostID string   `json:"host_id,omitempty"`
+	Availability string   `json:"availability,omitempty"`
+	Scope        string   `json:"scope"`
+	ID           int64    `json:"id"`
+	Name         string   `json:"name"`
+	OS           string   `json:"os"`
+	Status       string   `json:"status"`
+	Busy         bool     `json:"busy"`
+	Labels       []string `json:"labels"`
+	HostID       string   `json:"host_id,omitempty"`
 }
 type Job struct {
 	ID         int64  `json:"id"`
@@ -205,6 +208,40 @@ func (s *State) Update(key string, runners []Runner, jobs []Job, err error) {
 		s.jobs[key] = jobs
 	}
 }
+
+// availability describes admission separately from the runner's GitHub connection and job state.
+func availability(r Runner, host Host, source Source, now time.Time) string {
+	has := func(label string) bool {
+		return slices.ContainsFunc(r.Labels, func(s string) bool { return strings.EqualFold(s, label) })
+	}
+	if !has("orchard-managed") {
+		return ""
+	}
+	if source.Error != "" || source.Updated == nil || now.Sub(*source.Updated) > 90*time.Second || host.Power == nil || host.Power.AC == nil || now.Sub(host.Received) > 45*time.Second {
+		return "unknown"
+	}
+	busy := r.Busy || host.Worker != nil && host.Worker.Busy
+	if !*host.Power.AC {
+		if busy {
+			return "finishing-on-battery"
+		}
+		return "battery"
+	}
+	if host.Drained != nil && *host.Drained || host.Worker != nil && host.Worker.PauseUntil != nil && host.Worker.PauseUntil.After(now) {
+		return "paused"
+	}
+	if r.Status != "online" {
+		return "offline"
+	}
+	if busy {
+		return "busy"
+	}
+	if (has("apple-build") || has("windows-build")) && (host.Worker == nil || host.Worker.Eligible) {
+		return "ready"
+	}
+	return "waiting"
+}
+
 func (s *State) Snapshot() View {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -218,12 +255,13 @@ func (s *State) Snapshot() View {
 			refs[ref] = append(refs[ref], host.ID)
 		}
 	}
-	for _, list := range s.runners {
+	for key, list := range s.runners {
 		for _, r := range list {
 			matches := refs[RunnerRef{r.Scope, r.ID}]
 			if len(matches) == 1 {
 				r.HostID = matches[0]
 			}
+			r.Availability = availability(r, s.hosts[r.HostID], s.sources[key], now)
 			v.Runners = append(v.Runners, r)
 		}
 	}

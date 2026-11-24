@@ -15,8 +15,8 @@ type WindowsEligibility struct {
 	RunnerID int64 `json:"runner_id"`
 }
 
-// SetWindowsEligibility changes only the Windows routing label on this runner.
-func (g *GitHub) SetWindowsEligibility(ctx context.Context, org string, id int64, eligible bool) (WindowsEligibility, error) {
+// SetRoutingEligibility changes only the platform pool label on the bound runner.
+func (g *GitHub) SetRoutingEligibility(ctx context.Context, org string, id int64, platform string, eligible bool) (WindowsEligibility, error) {
 	if !ValidScope("orgs/"+org) || id <= 0 {
 		return WindowsEligibility{}, fmt.Errorf("invalid Windows runner identity")
 	}
@@ -32,10 +32,15 @@ func (g *GitHub) SetWindowsEligibility(ctx context.Context, org string, id int64
 	if err := g.get(ctx, base, &runner); err != nil {
 		return WindowsEligibility{}, err
 	}
-	if !strings.EqualFold(runner.OS, "windows") && !strings.EqualFold(runner.OS, "win") {
-		return WindowsEligibility{}, fmt.Errorf("runner is not Windows")
+	var label string
+	switch {
+	case platform == "windows" && (strings.EqualFold(runner.OS, "windows") || strings.EqualFold(runner.OS, "win")):
+		label = "windows-build"
+	case platform == "mac" && strings.EqualFold(runner.OS, "macOS"):
+		label = "apple-build"
+	default:
+		return WindowsEligibility{}, fmt.Errorf("runner platform mismatch")
 	}
-	const label = "windows-build"
 	hasLabel := false
 	for _, item := range runner.Labels {
 		if strings.EqualFold(item.Name, label) {
@@ -48,7 +53,7 @@ func (g *GitHub) SetWindowsEligibility(ctx context.Context, org string, id int64
 		var body io.Reader
 		if eligible {
 			method, path = http.MethodPost, base+"/labels"
-			body = strings.NewReader(`{"labels":["windows-build"]}`)
+			body = strings.NewReader(fmt.Sprintf(`{"labels":[%q]}`, label))
 		}
 		req, err := http.NewRequestWithContext(ctx, method, g.Base+path, body)
 		if err != nil {
@@ -78,7 +83,7 @@ func (g *GitHub) SetWindowsEligibility(ctx context.Context, org string, id int64
 
 // RemoveWindowsWorker only removes an offline, idle, de-routed runner.
 func (g *GitHub) RemoveWindowsWorker(ctx context.Context, org string, id int64) error {
-	status, err := g.SetWindowsEligibility(ctx, org, id, false)
+	status, err := g.SetRoutingEligibility(ctx, org, id, "windows", false)
 	if err != nil {
 		return err
 	}

@@ -127,3 +127,24 @@ func TestInvalidAndExcessHosts(t *testing.T) {
 		t.Fatal("invalid CPU")
 	}
 }
+
+func TestPoolAvailability(t *testing.T) {
+	now := time.Now()
+	ac := true
+	r := Runner{Status: "online", Labels: []string{"orchard-managed", "apple-build"}}
+	h := Host{Report: Report{Power: &Power{AC: &ac}}, Received: now}
+	source := Source{Updated: &now}
+	for _, tc := range []struct {
+		plugged, busy bool
+		want          string
+	}{{true, false, "ready"}, {true, true, "busy"}, {false, true, "finishing-on-battery"}, {false, false, "battery"}} {
+		ac = tc.plugged
+		r.Busy = tc.busy
+		if got := availability(r, h, source, now); got != tc.want {
+			t.Fatalf("got %s want %s", got, tc.want)
+		}
+	}
+	if got := availability(r, h, source, now.Add(65*time.Second)); got != "unknown" {
+		t.Fatal(got)
+	}
+}

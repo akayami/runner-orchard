@@ -83,7 +83,7 @@ func run() error {
 		token = strings.TrimSpace(string(data))
 	}
 	state := fleet.New()
-	if (c.Provisioning.Enabled || len(c.WindowsWorkers) != 0) && token == "" {
+	if (c.Provisioning.Enabled || len(c.WindowsWorkers)+len(c.MacWorkers) != 0) && token == "" {
 		return fmt.Errorf("provisioning and worker control require a server-side GitHub credential")
 	}
 	github := fleet.NewGitHub(func() string { return token })

@@ -33,12 +33,12 @@ func TestWindowsWorkerControlIsBoundToOneRunner(t *testing.T) {
 	token := strings.Repeat("ab", 32)
 	raw, _ := hex.DecodeString(token)
 	hash := sha256.Sum256(raw)
-	bindings := []WindowsWorker{{ID: "laptop", Organization: "example", RunnerID: 42, TokenHash: hex.EncodeToString(hash[:])}}
-	if err := validateWindowsWorkers(bindings); err != nil {
+	bindings := []WorkerBinding{{ID: "laptop", Organization: "example", RunnerID: 42, TokenHash: hex.EncodeToString(hash[:])}}
+	if err := validateWorkerBindings(bindings); err != nil {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
-	registerWindowsWorkers(mux, bindings, github)
+	registerWorkerControl(mux, bindings, github, "windows")
 	request := func(id, auth, body string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest("POST", "/api/windows-workers/"+id, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -62,5 +62,43 @@ func TestWindowsWorkerControlIsBoundToOneRunner(t *testing.T) {
 	w := request("laptop", "Bearer "+token, `{"eligible":false}`)
 	if w.Code != 200 || w.Body.String() != "{\"eligible\":false,\"busy\":true,\"online\":true,\"runner_id\":42}\n" || requests.Load() != 2 {
 		t.Fatal(w.Code, w.Body.String(), requests.Load())
+	}
+}
+
+func TestMacPowerControlCannotRemoveRegistration(t *testing.T) {
+	calls := 0
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		switch {
+		case r.Method == "GET" && r.URL.Path == "/orgs/example/actions/runners/12":
+			fmt.Fprint(w, `{"os":"macOS","busy":true,"status":"online","labels":[{"name":"apple-build"},{"name":"macos-signing"}]}`)
+		case r.Method == "DELETE" && r.URL.Path == "/orgs/example/actions/runners/12/labels/apple-build":
+			fmt.Fprint(w, `{"labels":[{"name":"macos-signing"}]}`)
+		default:
+			t.Errorf("unexpected operation %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer api.Close()
+	gh := fleet.NewGitHub(func() string { return "test" })
+	gh.Base = api.URL
+	raw := make([]byte, 32)
+	hash := sha256.Sum256(raw)
+	mux := http.NewServeMux()
+	registerWorkerControl(mux, []WorkerBinding{{ID: "mac", Organization: "example", RunnerID: 12, TokenHash: hex.EncodeToString(hash[:])}}, gh, "mac")
+	for _, tc := range []struct {
+		body string
+		code int
+	}{{`{"remove":true}`, 400}, {`{"eligible":false}`, 200}} {
+		req := httptest.NewRequest("POST", "/api/mac-workers/mac", strings.NewReader(tc.body))
+		req.Header.Set("Authorization", "Bearer "+hex.EncodeToString(raw))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		if w.Code != tc.code {
+			t.Fatal(w.Code, w.Body.String())
+		}
+	}
+	if calls != 2 {
+		t.Fatal(calls)
 	}
 }
